@@ -4,6 +4,7 @@ use anyhow::Result;
 async fn main() -> Result<()> {
    // solana_test::createTokenMint().await?;
    // solana_test::createTransferTokens().await?;
-    solana_test::testGetAccountInfo().await?;
+    //solana_test::testGetAccountInfo().await?;
+    solana_test::testGetBalance().await?;
     Ok(())
 }

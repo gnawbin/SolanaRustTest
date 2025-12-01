@@ -3,11 +3,15 @@ use anyhow::{Ok, Result};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_commitment_config::CommitmentConfig;
 use solana_program::example_mocks::solana_sdk::system_instruction::create_account;
-use solana_program::account_info::{AccountInfo};
+use solana_transaction_status_client_types::{TransactionDetails, UiTransactionEncoding};
+
 use solana_sdk::{
     program_pack::Pack,
     signature::{Keypair, Signer},
     transaction::Transaction,
+    native_token::LAMPORTS_PER_SOL, 
+    pubkey::Pubkey,
+    instruction::{AccountMeta, Instruction}
 };
 use spl_associated_token_account_interface::address::get_associated_token_address_with_program_id;
 
@@ -15,11 +19,8 @@ use spl_token_interface::{id as token_program_id, instruction::{initialize_accou
 use spl_associated_token_account_interface::{
     address::get_associated_token_address, instruction::create_associated_token_account,
 };
-use solana_sdk::instruction::{AccountMeta, Instruction};
-use solana_sdk::pubkey::Pubkey;
+
 use std::str::FromStr;
-
-
 pub async fn createTransferTokens()->Result<()>{
     // Create connection to local validator
     let client = RpcClient::new_with_commitment(
@@ -533,7 +534,7 @@ pub async  fn createTokenMint()->Result<()>{
     let mint = Keypair::new();
 
     let space = Mint::LEN;
-    let rent = client.get_minimum_balance_for_rent_exemption(space).await?;
+    let _rent = client.get_minimum_balance_for_rent_exemption(space).await?;
 
     // Create account instruction using system program
     let create_account_instruction = Instruction {
@@ -586,4 +587,18 @@ pub async fn testGetAccountInfo()->Result<()>{
     println!("{:#?}", account);
 
     Ok(())
+}
+
+pub async  fn testGetBalance()->Result<()>{
+ 
+    let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+     let pubkey = Pubkey::from_str("83astBRguLMdt2h5U1Tpdq5tjFoJ6noeGwaY3mDLVcri")?;
+    let balance = client.get_balance(&pubkey).await?;
+
+    println!("{:#?} SOL", balance / LAMPORTS_PER_SOL);
+    Ok(())
+
 }
