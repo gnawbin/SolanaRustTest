@@ -3,8 +3,6 @@ use anyhow::{Ok, Result};
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_commitment_config::CommitmentConfig;
 use solana_program::example_mocks::solana_sdk::system_instruction::create_account;
-use solana_transaction_status_client_types::{TransactionDetails, UiTransactionEncoding};
-
 use solana_sdk::{
     program_pack::Pack,
     signature::{Keypair, Signer},
@@ -20,7 +18,131 @@ use spl_associated_token_account_interface::{
     address::get_associated_token_address, instruction::create_associated_token_account,
 };
 
-use std::str::FromStr;
+use std::{cmp::min, str::FromStr};
+pub async fn createApproveChecked()->Result<()>{
+    //Create connection to local validator
+    let client=RpcClient::new_with_commitment(
+        String::from("http://localhost::8899"),
+        CommitmentConfig::confirmed());
+    let latest_blockhash=client.get_latest_blockhash();
+    //Generate a nwe keypair for the fee payer
+    let fee_payer=Keypair::new();
+    //Generate a keypair for the delegate
+    let delegate=Keypair::new();
+    //Airdrop 1 SOL to fee payer
+    let airdrop_signature=client
+    .request_airdrop(&fee_payer.pubkey(),1_000_000_000).await?;
+    client.confirm_transaction(&airdrop_signature).await?;
+
+    loop {
+        let confirmed=client.confirm_transaction(&airdrop_signature).await?;
+        if confirmed{
+            break;
+        }
+    }
+     // Generate keypair to use as address of mint
+     let mint=Keypair::new();
+     //Number of decimals form the mint
+     let decimals=2;
+     //Get default mint account size(in bytes),no extensions enabled
+     let mint_space=Mint::LEN;
+     let mint_rent=client
+     .get_minimum_balance_for_rent_exemption(mint_space).await?;
+     // Instruction to create new account for mint (token program)
+     let create_account_instruction=create_account(
+        &fee_payer.pubkey(),//payer 
+        &mint.pubkey(),//new account
+        mint_rent, //lamports
+        mint_space as u64,//space 
+        &token_program_id());//program id
+        // Instruction to initialize mint account data
+        let initialize_mint_instruction=initialize_mint(
+            &token_program_id(),//token_program_id, 
+            &mint.pubkey(),//mint,
+             &fee_payer.pubkey(),//mint authority
+              Some(&fee_payer.pubkey()),//freeze authority 
+              decimals);
+         // Calculate the associated token account address for fee_payer
+       let associated_token_address=get_associated_token_address(
+        &fee_payer.pubkey(),//owner
+         &mint.pubkey());//mint
+
+      // Instruction to create associated token account
+    let create_ata_instruction = create_associated_token_account(
+        &fee_payer.pubkey(), // funding address
+        &fee_payer.pubkey(), // wallet address
+        &mint.pubkey(),      // mint address
+        &token_program_id(), // program id
+    );
+     // Amount of tokens to mint (100 tokens with 2 decimals)
+    let amount = 100_00;
+    // Create mint_to instruction to mint tokens to the associated token account
+    let mint_to_instruction = mint_to(
+        &token_program_id(),
+        &mint.pubkey(),            // mint
+        &associated_token_address, // destination
+        &fee_payer.pubkey(),       // authority
+        &[&fee_payer.pubkey()],    // signer
+        amount,                    // amount
+    )?;
+
+    // Create transaction and add instructions
+    let transaction = Transaction::new_signed_with_payer(
+        &[
+            create_account_instruction,
+            initialize_mint_instruction,
+            create_ata_instruction,
+            mint_to_instruction,
+        ],
+        Some(&fee_payer.pubkey()),
+        &[&fee_payer, &mint],
+        latest_blockhash,
+    );
+
+    // Send and confirm transaction
+    client.send_and_confirm_transaction(&transaction).await?;
+
+    // Amount of tokens to approve (1 token with 2 decimals)
+    let approve_amount = 1_00;
+
+    // Create approve_checked instruction
+    let approve_instruction = approve_checked(
+        &token_program_id(),       // program id
+        &associated_token_address, // source token account
+        &mint.pubkey(),            // mint
+        &delegate.pubkey(),        // delegate
+        &fee_payer.pubkey(),       // owner
+        &[&fee_payer.pubkey()],    // signers
+        approve_amount,            // amount
+        decimals,                  // decimals
+    )?;
+
+    // Create transaction for approving delegate
+    let transaction = Transaction::new_signed_with_payer(
+        &[approve_instruction],
+        Some(&fee_payer.pubkey()),
+        &[&fee_payer],
+        latest_blockhash,
+    );
+
+    // Send and confirm transaction
+    let transaction_signature = client.send_and_confirm_transaction(&transaction).await?;
+
+    let token = client.get_token_account(&associated_token_address).await?;
+
+    println!("Successfully approved delegate for 1.0 token");
+
+    println!("\nDelegate Address: {}", delegate.pubkey());
+
+    println!("\nToken Account Address: {}", associated_token_address);
+    if let Some(token) = token {
+        println!("{:#?}", token);
+    }
+    println!("Transaction Signature: {}", transaction_signature);
+
+
+        Ok(())
+}
 pub async fn createTransferTokens()->Result<()>{
     // Create connection to local validator
     let client = RpcClient::new_with_commitment(
