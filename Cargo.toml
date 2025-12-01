@@ -1,0 +1,27 @@
+[package]
+name = "solana-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pinocchio = "0.9.2"
+pinocchio-pubkey = "0.3.0"
+
+pinocchio-system = "0.4.0"
+pinocchio-token = "0.4.0"
+bytemuck = { version = "1.23.0", features = ["derive", "min_const_generics"] }
+pinocchio-associated-token-account = "0.2.0"
+anyhow={version="1.0.100"}
+solana-sdk = { version = "3.0.0"}
+solana-program-runtime = { version = "3.0.0"}
+solana-client={version="3.0.0"}
+solana-program = { version = "3.0.0"}
+solana-system-interface = "3.0.0"
+solana-commitment-config = "3.1.0"
+spl-token-interface = "2.0.0"
+tokio = { version = "1.0", features = ["full"] }
+spl-associated-token-account-interface={version="2.0.0"}
+[dev-dependencies]
+mollusk-svm = { version = "0.7.2"}
+solana-sdk = { version = "3.0.0"}
+solana-program-runtime = { version = "3.0.0"}
