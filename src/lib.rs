@@ -574,3 +574,16 @@ pub async  fn createTokenMint()->Result<()>{
   Ok(())
 
 }
+
+pub async fn testGetAccountInfo()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed() //承诺描述了区块在该时间点的最终确定程度。详见 配置状态承诺。
+    );
+    let pubkey = Pubkey::from_str("vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg")?;
+    let account = client.get_account(&pubkey).await?;
+
+    println!("{:#?}", account);
+
+    Ok(())
+}
