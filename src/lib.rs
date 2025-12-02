@@ -9,6 +9,7 @@ use solana_sdk::{
     transaction::Transaction,
     native_token::LAMPORTS_PER_SOL, 
     pubkey::Pubkey,
+    pubkey,
     instruction::{AccountMeta, Instruction},
     message::Message
 };
@@ -32,7 +33,7 @@ use futures::stream::StreamExt;
 pub async fn createApproveChecked()->Result<()>{
     //Create connection to local validator
     let client=RpcClient::new_with_commitment(
-        String::from("http://localhost::8899"),
+        String::from("http://localhost:8899"),
         CommitmentConfig::confirmed());
     let  latest_blockhash=client.get_latest_blockhash().await?;
     //Generate a nwe keypair for the fee payer
@@ -903,6 +904,109 @@ pub async fn testFeeForMessage()->Result<()>{
     let fee = client.get_fee_for_message(&message).await?;
 
     println!("{:#?}", fee);
+
+    Ok(())
+}
+pub async fn testGetFirstAvailableBlock()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let first_available_block = client.get_first_available_block().await?;
+
+    println!("{:#?}", first_available_block);
+
+    Ok(())
+}
+pub async fn testGetGenesisHash()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let genesis_hash = client.get_genesis_hash().await?;
+
+    println!("{:#?}", genesis_hash);
+
+    Ok(())
+}
+pub async fn testGetHealth()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let health = client.get_health().await?;
+
+    println!("{:#?}", health);
+
+    Ok(())
+}
+pub async fn testGetHighestSnapshotSlot()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let highest_snapshot_slot = client.get_highest_snapshot_slot().await?;
+
+    println!("{:#?}", highest_snapshot_slot);
+
+    Ok(())
+}
+pub async fn testGetIdentity()->Result<()>{
+        let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let identity = client.get_identity().await?;
+
+    println!("{:#?}", identity);
+
+    Ok(())
+}
+pub async fn testGetInflationGovernor()->Result<()>{
+   let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let inflation_govener = client.get_inflation_governor().await?;
+
+    println!("{:#?}", inflation_govener);
+
+    Ok(())  
+}
+pub async fn testGetInflationRate()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let inflation_rate = client.get_inflation_rate().await?;
+
+    println!("{:#?}", inflation_rate);
+
+    Ok(())
+}
+pub async fn testGetInflationReward()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let addresses = [
+        pubkey!("6dmNQ5jwLeLk5REvio1JcMshcbvkYMwy26sJ8pbkvStu"),
+        pubkey!("BGsqMegLpV6n6Ve146sSX2dTjUMj3M92HnU8BbNRMhF2"),
+    ];
+
+    let epoch = 2;
+
+    let inflation_reward = client.get_inflation_reward(&addresses, Some(epoch)).await?;
+
+    println!("{:#?}", inflation_reward);
 
     Ok(())
 }
