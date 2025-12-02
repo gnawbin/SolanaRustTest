@@ -1,6 +1,6 @@
 
 use anyhow::{Ok, Result};
-use solana_client::nonblocking::rpc_client::RpcClient;
+
 use solana_commitment_config::CommitmentConfig;
 use solana_program::example_mocks::solana_sdk::system_instruction::create_account;
 use solana_sdk::{
@@ -9,22 +9,32 @@ use solana_sdk::{
     transaction::Transaction,
     native_token::LAMPORTS_PER_SOL, 
     pubkey::Pubkey,
-    instruction::{AccountMeta, Instruction}
+    instruction::{AccountMeta, Instruction},
+    message::Message
 };
 use spl_associated_token_account_interface::address::get_associated_token_address_with_program_id;
 
-use spl_token_interface::{id as token_program_id, instruction::{initialize_account, initialize_mint, mint_to, transfer_checked},  state::{Account, Mint}};
+use spl_token_interface::{id as token_program_id, instruction::{initialize_account, initialize_mint, mint_to, transfer_checked,approve_checked},  state::{Account, Mint}};
 use spl_associated_token_account_interface::{
     address::get_associated_token_address, instruction::create_associated_token_account,
 };
+use solana_transaction_status_client_types::{TransactionDetails, UiTransactionEncoding};
+use base64::{engine::general_purpose, Engine};
+use std::str::FromStr;
+use solana_client::{
+    nonblocking::pubsub_client::PubsubClient, nonblocking::rpc_client::RpcClient,
+    rpc_config::RpcAccountInfoConfig,
+};
+use bincode::deserialize;
 
-use std::{cmp::min, str::FromStr};
+
+use futures::stream::StreamExt;
 pub async fn createApproveChecked()->Result<()>{
     //Create connection to local validator
     let client=RpcClient::new_with_commitment(
         String::from("http://localhost::8899"),
         CommitmentConfig::confirmed());
-    let latest_blockhash=client.get_latest_blockhash();
+    let  latest_blockhash=client.get_latest_blockhash().await?;
     //Generate a nwe keypair for the fee payer
     let fee_payer=Keypair::new();
     //Generate a keypair for the delegate
@@ -61,7 +71,7 @@ pub async fn createApproveChecked()->Result<()>{
             &mint.pubkey(),//mint,
              &fee_payer.pubkey(),//mint authority
               Some(&fee_payer.pubkey()),//freeze authority 
-              decimals);
+              decimals)?;
          // Calculate the associated token account address for fee_payer
        let associated_token_address=get_associated_token_address(
         &fee_payer.pubkey(),//owner
@@ -723,4 +733,176 @@ pub async  fn testGetBalance()->Result<()>{
     println!("{:#?} SOL", balance / LAMPORTS_PER_SOL);
     Ok(())
 
+}
+pub async  fn testGetBlock()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+    let slot_number = 377261141;
+
+    let config = solana_client::rpc_config::RpcBlockConfig {
+        encoding: UiTransactionEncoding::Base58.into(),
+        transaction_details: TransactionDetails::Full.into(),
+        rewards: None,
+        commitment: CommitmentConfig::finalized().into(),
+        max_supported_transaction_version: Some(0),
+    };
+    let block = client.get_block_with_config(slot_number, config).await?;
+
+    println!("Block: {:#?}", block);
+
+    Ok(())
+}
+
+pub async fn testGetBlockHeight()->Result<()>{
+    let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+     let block_height = client.get_block_height().await?;
+
+    println!("Block height: {:#?}", block_height);
+
+    Ok(())
+}
+pub async  fn testGetBlockProduction()->Result<()>{
+      let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+    let block_production=client.get_block_production().await?;
+    println!("Block production: {:#?}",block_production);
+    Ok(())
+}
+pub async  fn testGetBlocks()->Result<()>{
+      let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+    let start_slot=377268280;
+    let end_slot=377268285;
+      let blocks = client.get_blocks(start_slot, Some(end_slot)).await?;
+    println!("Blocks produced: {:#?}", blocks);
+
+    Ok(())
+}
+pub async fn testGetBlocksWithLimit()->Result<()>{
+       let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let start_slot = 377268280;
+    let limit = 5;
+
+    let blocks = client.get_blocks_with_limit(start_slot, limit).await?;
+
+    println!("Blocks produced: {:?}", blocks);
+
+    Ok(())
+}
+pub async fn testGetBlockTime()->Result<()>{
+      let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let slot_number = 377268280;
+
+    let block_time = client.get_block_time(slot_number).await?;
+
+    println!("Blocks time: {:?}", block_time);
+
+    Ok(())
+}
+pub async fn testGetClusterNodes()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let block_time = client.get_cluster_nodes().await?;
+
+    println!("{:#?}", block_time);
+
+    Ok(())
+}
+pub async fn subscribingEvent()->Result<()>{
+    let wallet=Keypair::new();
+    let pubkey=wallet.pubkey();
+    let connection=RpcClient::new_with_commitment(
+        "http://localhost:8899".to_string(),
+        CommitmentConfig::confirmed(),
+    );
+    let ws_client = PubsubClient::new("ws://localhost:8900").await?;
+ tokio::spawn(async move {
+        let config = RpcAccountInfoConfig {
+            commitment: Some(CommitmentConfig::confirmed()),
+            encoding: None,
+            data_slice: None,
+            min_context_slot: None,
+        };
+
+        let (mut stream, _) = ws_client
+            .account_subscribe(&pubkey, Some(config))
+            .await
+            .expect("Failed to subscribe to account updates");
+
+        while let Some(account) = stream.next().await {
+            println!("{:#?}", account);
+        }
+    });
+
+    let airdrop_signature = connection
+        .request_airdrop(&wallet.pubkey(), LAMPORTS_PER_SOL)
+        .await?;
+    loop {
+        let confirmed = connection.confirm_transaction(&airdrop_signature).await?;
+        if confirmed {
+            break;
+        }
+    }
+    Ok(())
+}
+
+pub async  fn testGetEpochInfo()->Result<()>{
+        let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let epoch_info = client.get_epoch_info().await?;
+
+    println!("{:#?}", epoch_info);
+
+    Ok(())
+}
+pub async fn testGetEpochSchedule()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let epoch_schedule = client.get_epoch_schedule().await?;
+
+    println!("{:#?}", epoch_schedule);
+
+    Ok(())
+}
+pub async fn testFeeForMessage()->Result<()>{
+     let client = RpcClient::new_with_commitment(
+        String::from("https://api.devnet.solana.com"),
+        CommitmentConfig::confirmed(),
+    );
+
+    let base_64_message = "AQABAgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAQAA";
+    let bytes = general_purpose::STANDARD.decode(base_64_message).unwrap();
+    let message: Message = deserialize(&bytes).unwrap();
+
+    let fee = client.get_fee_for_message(&message).await?;
+
+    println!("{:#?}", fee);
+
+    Ok(())
 }
