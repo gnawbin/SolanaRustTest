@@ -1,21 +1,21 @@
 
 use anyhow::{Ok, Result};
-
 use solana_commitment_config::CommitmentConfig;
-use solana_program::example_mocks::solana_sdk::system_instruction::create_account;
+use solana_sdk::system_instruction::{create_account, transfer};
 use solana_sdk::{
     program_pack::Pack,
-    signature::{Keypair, Signer},
+    signature::{Keypair, keypair_from_seed},
     transaction::Transaction,
-    native_token::LAMPORTS_PER_SOL, 
+    native_token::LAMPORTS_PER_SOL,
     pubkey::Pubkey,
     pubkey,
     instruction::{AccountMeta, Instruction},
-    message::Message
+    message::Message,
+    signer::Signer
 };
-use spl_associated_token_account_interface::address::get_associated_token_address_with_program_id;
 
-use spl_token_interface::{id as token_program_id, instruction::{initialize_account, initialize_mint, mint_to, transfer_checked,approve_checked},  state::{Account, Mint}};
+use spl_associated_token_account_interface::address::get_associated_token_address_with_program_id;
+use spl_token_interface::{id as token_program_id, instruction::{initialize_account, initialize_mint, mint_to, transfer_checked, approve_checked}, state::{Account, Mint}};
 use spl_associated_token_account_interface::{
     address::get_associated_token_address, instruction::create_associated_token_account,
 };
@@ -23,12 +23,11 @@ use solana_transaction_status_client_types::{TransactionDetails, UiTransactionEn
 use base64::{engine::general_purpose, Engine};
 use std::str::FromStr;
 use solana_client::{
-    nonblocking::pubsub_client::PubsubClient, nonblocking::rpc_client::RpcClient,
+    nonblocking::{pubsub_client::PubsubClient, rpc_client::RpcClient},
     rpc_config::RpcAccountInfoConfig,
 };
 use bincode::deserialize;
-
-
+use bip39::{Language, Mnemonic, Seed, MnemonicType};
 use futures::stream::StreamExt;
 pub async fn createApproveChecked()->Result<()>{
     //Create connection to local validator
@@ -1008,5 +1007,112 @@ pub async fn testGetInflationReward()->Result<()>{
 
     println!("{:#?}", inflation_reward);
 
+    Ok(())
+}
+
+pub async fn createKeypair()->Result<()>{
+     let keypair = Keypair::new();
+    let address = keypair.pubkey();
+
+    println!("address: {address}");
+    Ok(())
+}
+pub async  fn validatePublicKey()->Result<()>{
+        // on curve address
+    let on_curve_public_key = pubkey!("5oNDL3swdJJF1g9DzJiZ4ynHXgszjAEpUkxVYejchzrY");
+    println!("is on curve: {}", on_curve_public_key.is_on_curve());
+
+    let off_curve_public_key = pubkey!("4BJXYkfvg37zEmBbsacZjeQDpTNx91KppxFJxRqrz48e");
+    println!("is off curve: {}", off_curve_public_key.is_on_curve());
+    Ok(())
+}
+pub async fn generateMnemonicsKeypairs()->Result<()>{
+     let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
+    let phrase = mnemonic.phrase();
+
+    println!("phrase: {}", phrase);
+    Ok(())
+}
+pub async fn restoringBIP39FormatMnemonics()->Result<()>{
+       let phrase = "pill tomorrow foster begin walnut borrow virtual kick shift mutual shoe scatter";
+    let mnemonic = Mnemonic::from_phrase(phrase, Language::English)?;
+
+    let seed = Seed::new(&mnemonic, "");
+    let keypair = keypair_from_seed(seed.as_bytes()).unwrap();
+
+    println!("recovered address {:?}", keypair.pubkey());
+
+    Ok(())
+}
+pub async fn signAndVerifyMessage()->Result<()>{
+        let keypair_bytes = [
+        174, 47, 154, 16, 202, 193, 206, 113, 199, 190, 53, 133, 169, 175, 31, 56, 222, 53, 138,
+        189, 224, 216, 117, 173, 10, 149, 53, 45, 73, 251, 237, 246, 15, 185, 186, 82, 177, 240,
+        148, 69, 241, 227, 167, 80, 141, 89, 240, 121, 121, 35, 172, 247, 68, 251, 226, 218, 48,
+        63, 176, 109, 168, 89, 238, 135,
+    ];
+    let keypair = Keypair::try_from(&keypair_bytes[..])?;
+    let message = "The quick brown fox jumps over the lazy dog";
+
+    let signature = keypair.sign_message(message.as_bytes());
+    let is_valid_signature = signature.verify(&keypair.pubkey().to_bytes(), message.as_bytes());
+    println!("Verified: {:?}", is_valid_signature);
+
+    Ok(())
+}
+pub async  fn sendSOL()->Result<()>{
+    let client=RpcClient::new_with_commitment(String::from("http://localhost:8899"),
+     CommitmentConfig::confirmed());
+     let from_keypair=Keypair::new();
+     let to_keypair=Keypair::new();
+     //Airdrop SOL to sender
+      // Airdrop SOL to sender
+    let airdrop_signature = client
+        .request_airdrop(&from_keypair.pubkey(), 5 * LAMPORTS_PER_SOL)
+        .await?;
+
+    loop {
+        if client.confirm_transaction(&airdrop_signature).await? {
+            break;
+        }
+    }
+    //Fetch balances before transfer
+    let from_balance_before=client.get_balance(&from_keypair.pubkey()).await?;
+    let to_balance_before=client.get_balance(&to_keypair.pubkey()).await?;
+
+   println!("Before transfer:");
+    println!(
+        "  From: {} ({} SOL)",
+        from_keypair.pubkey(),
+        from_balance_before as f64 / LAMPORTS_PER_SOL as f64
+    );
+    println!(
+        "  To:   {} ({} SOL)",
+        to_keypair.pubkey(),
+        to_balance_before as f64 / LAMPORTS_PER_SOL as f64
+    );
+ // Create and send transfer transaction
+   let transfer_ix = transfer(&from_keypair.pubkey(), &to_keypair.pubkey(), LAMPORTS_PER_SOL);
+   let latest_blockhash = client.get_latest_blockhash().await?;
+   let mut transaction = Transaction::new_with_payer(&[transfer_ix], Some(&from_keypair.pubkey()));
+    transaction.sign(&[&from_keypair], latest_blockhash);
+     let signature = client.send_and_confirm_transaction(&transaction).await?;
+    println!("\nTransaction Signature: {}", signature);
+
+    // Fetch balances after transfer
+    let from_balance_after = client.get_balance(&from_keypair.pubkey()).await?;
+    let to_balance_after = client.get_balance(&to_keypair.pubkey()).await?;
+
+    println!("\nAfter transfer:");
+    println!(
+        "  From: {} ({} SOL)",
+        from_keypair.pubkey(),
+        from_balance_after as f64 / LAMPORTS_PER_SOL as f64
+    );
+    println!(
+        "  To:   {} ({} SOL)",
+        to_keypair.pubkey(),
+        to_balance_after as f64 / LAMPORTS_PER_SOL as f64
+    );
     Ok(())
 }
