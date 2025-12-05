@@ -6,6 +6,6 @@ async fn main() -> Result<()> {
     // solana_test::createTransferTokens().await?;
     // solana_test::testGetAccountInfo().await?;
     // solana_test::testGetInflationReward().await?;
-    solana_test::sendSOL().await?;
+    solana_test::createPassword().await?;
     Ok(())
 }

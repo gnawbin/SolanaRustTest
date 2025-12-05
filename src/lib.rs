@@ -1,7 +1,10 @@
 
-use anyhow::{Ok, Result};
+use anyhow::{Context, Result};
+use argon2::{
+    Argon2,PasswordHash,PasswordHasher,PasswordVerifier,
+    password_hash::{SaltString,rand_core::OsRng}
+};
 use solana_commitment_config::CommitmentConfig;
-use solana_sdk::system_instruction::{create_account, transfer};
 use solana_sdk::{
     program_pack::Pack,
     signature::{Keypair, keypair_from_seed},
@@ -11,8 +14,11 @@ use solana_sdk::{
     pubkey,
     instruction::{AccountMeta, Instruction},
     message::Message,
-    signer::Signer
+    signer::Signer,
+   
 };
+use solana_program::example_mocks::solana_sdk::system_instruction::create_account;
+
 
 use spl_associated_token_account_interface::address::get_associated_token_address_with_program_id;
 use spl_token_interface::{id as token_program_id, instruction::{initialize_account, initialize_mint, mint_to, transfer_checked, approve_checked}, state::{Account, Mint}};
@@ -29,6 +35,64 @@ use solana_client::{
 use bincode::deserialize;
 use bip39::{Language, Mnemonic, Seed, MnemonicType};
 use futures::stream::StreamExt;
+use std::fmt;
+//2025年生产推荐参数
+const MEMORY_COST: u32=65_536;
+const ITERATIONS: u32=2;
+const PARALLELISM: u32=4;
+const HASH_LEN: u32=32;
+pub  struct PasswordService;
+impl PasswordService {
+     /// 注册时：哈希密码（返回 PHC 格式字符串，可直接存数据库）
+     pub fn hash(password: impl AsRef<[u8]>) -> Result<String> {
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::new(
+            argon2::Algorithm::Argon2id,
+            argon2::Version::V0x13,
+            argon2::Params::new(
+                MEMORY_COST,
+                ITERATIONS,
+                PARALLELISM,
+                Some(HASH_LEN.try_into().map_err(|e: std::num::TryFromIntError| anyhow::Error::msg(e.to_string()))?),
+            )
+            .map_err(|e: argon2::Error| anyhow::Error::msg(e.to_string()))?,
+        );
+        // 自动生成 PHC 字符串：$argon2id$v=19$m=65536,t=2,p=4$xxxx$yyyy
+        let hash = argon2
+            .hash_password(password.as_ref(), &salt)
+            .map_err(|e: argon2::password_hash::Error| anyhow::Error::msg(e.to_string()))?
+            .to_string();
+
+        Ok(hash)
+     }
+    pub fn verify(stored_hash: &str, password: impl AsRef<[u8]>) -> bool {
+        let parsed = match PasswordHash::new(stored_hash) {
+            Ok(h) => h,
+            Err(_) => return false,
+        };
+
+        Argon2::default()
+            .verify_password(password.as_ref(), &parsed)
+            .is_ok()
+    }
+    
+}
+pub async fn createPassword()->Result<()>{
+    let password = "P@ssw0rd!2025_VeryStrong";
+
+    // 1. 注册：生成哈希
+    let hashed = PasswordService::hash(password).unwrap();
+    println!("存入数据库 → {}", hashed);
+    // 示例输出：
+    // $argon2id$v=19$m=65536,t=2,p=4$z8z8z8z8z8z8z8w$8Z9j3fN9i3s8fN9j3fN9i3s8fN9j3fN9i3s8fA==
+
+    // 2. 登录：验证
+    assert!(PasswordService::verify(&hashed, password));
+    assert!(!PasswordService::verify(&hashed, "wrong password"));
+
+    println!("Argon2id 验证成功！");
+   Ok(())
+}
 pub async fn createApproveChecked()->Result<()>{
     //Create connection to local validator
     let client=RpcClient::new_with_commitment(
@@ -1058,61 +1122,5 @@ pub async fn signAndVerifyMessage()->Result<()>{
     let is_valid_signature = signature.verify(&keypair.pubkey().to_bytes(), message.as_bytes());
     println!("Verified: {:?}", is_valid_signature);
 
-    Ok(())
-}
-pub async  fn sendSOL()->Result<()>{
-    let client=RpcClient::new_with_commitment(String::from("http://localhost:8899"),
-     CommitmentConfig::confirmed());
-     let from_keypair=Keypair::new();
-     let to_keypair=Keypair::new();
-     //Airdrop SOL to sender
-      // Airdrop SOL to sender
-    let airdrop_signature = client
-        .request_airdrop(&from_keypair.pubkey(), 5 * LAMPORTS_PER_SOL)
-        .await?;
-
-    loop {
-        if client.confirm_transaction(&airdrop_signature).await? {
-            break;
-        }
-    }
-    //Fetch balances before transfer
-    let from_balance_before=client.get_balance(&from_keypair.pubkey()).await?;
-    let to_balance_before=client.get_balance(&to_keypair.pubkey()).await?;
-
-   println!("Before transfer:");
-    println!(
-        "  From: {} ({} SOL)",
-        from_keypair.pubkey(),
-        from_balance_before as f64 / LAMPORTS_PER_SOL as f64
-    );
-    println!(
-        "  To:   {} ({} SOL)",
-        to_keypair.pubkey(),
-        to_balance_before as f64 / LAMPORTS_PER_SOL as f64
-    );
- // Create and send transfer transaction
-   let transfer_ix = transfer(&from_keypair.pubkey(), &to_keypair.pubkey(), LAMPORTS_PER_SOL);
-   let latest_blockhash = client.get_latest_blockhash().await?;
-   let mut transaction = Transaction::new_with_payer(&[transfer_ix], Some(&from_keypair.pubkey()));
-    transaction.sign(&[&from_keypair], latest_blockhash);
-     let signature = client.send_and_confirm_transaction(&transaction).await?;
-    println!("\nTransaction Signature: {}", signature);
-
-    // Fetch balances after transfer
-    let from_balance_after = client.get_balance(&from_keypair.pubkey()).await?;
-    let to_balance_after = client.get_balance(&to_keypair.pubkey()).await?;
-
-    println!("\nAfter transfer:");
-    println!(
-        "  From: {} ({} SOL)",
-        from_keypair.pubkey(),
-        from_balance_after as f64 / LAMPORTS_PER_SOL as f64
-    );
-    println!(
-        "  To:   {} ({} SOL)",
-        to_keypair.pubkey(),
-        to_balance_after as f64 / LAMPORTS_PER_SOL as f64
-    );
     Ok(())
 }
