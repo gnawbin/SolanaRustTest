@@ -1,9 +1,24 @@
 
-use anyhow::{Context, Result};
+use anyhow::{Context as AnyhowContext, Result};
 use argon2::{
     Argon2,PasswordHash,PasswordHasher,PasswordVerifier,
     password_hash::{SaltString,rand_core::OsRng}
 };
+use opentelemetry::{trace, Context as OtelContext, metrics::Meter};
+use opentelemetry_sdk::trace::{SdkTracerProvider, BatchSpanProcessor};
+use opentelemetry_sdk::Resource;
+use std::convert::Infallible;
+use std::net::SocketAddr;
+use rand::Rng;
+use tokio::net::TcpListener;
+
+use http_body_util::Full;
+use hyper::body::Bytes;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::Method;
+use hyper::{Request, Response};
+use hyper_util::rt::TokioIo;
 use solana_commitment_config::CommitmentConfig;
 use solana_sdk::{
     program_pack::Pack,
@@ -42,6 +57,23 @@ const ITERATIONS: u32=2;
 const PARALLELISM: u32=4;
 const HASH_LEN: u32=32;
 pub  struct PasswordService;
+
+async fn roll_dice(_: Request<hyper::body::Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    let random_number = rand::rng().random_range(1..=6);
+    Ok(Response::new(Full::new(Bytes::from(
+        random_number.to_string(),
+    ))))
+}
+
+async fn handle(req: Request<hyper::body::Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    match (req.method(), req.uri().path()) {
+        (&Method::GET, "/rolldice") => roll_dice(req).await,
+        _ => Ok(Response::builder()
+            .status(404)
+            .body(Full::new(Bytes::from("Not Found")))
+            .unwrap()),
+    }
+}
 impl PasswordService {
      /// 注册时：哈希密码（返回 PHC 格式字符串，可直接存数据库）
      pub fn hash(password: impl AsRef<[u8]>) -> Result<String> {
@@ -1123,4 +1155,26 @@ pub async fn signAndVerifyMessage()->Result<()>{
     println!("Verified: {:?}", is_valid_signature);
 
     Ok(())
+}
+
+pub async fn testopentelemetry()-> Result<(), Box<dyn std::error::Error + Send + Sync>>{
+      let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+
+
+    let listener = TcpListener::bind(addr).await?;
+
+    loop {
+        let (stream, _) = listener.accept().await?;
+
+        let io = TokioIo::new(stream);
+
+        tokio::task::spawn(async move {
+            if let Err(err) = http1::Builder::new()
+                .serve_connection(io, service_fn(handle))
+                .await
+            {
+                eprintln!("Error serving connection: {:?}", err);
+            }
+        });
+    }
 }
