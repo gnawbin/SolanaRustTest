@@ -1,14 +1,15 @@
 use anyhow::Result;
 
-//#[tokio::main]
-//async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // solana_test::createTokenMint().await?;
     // solana_test::createTransferTokens().await?;
     // solana_test::testGetAccountInfo().await?;
     // solana_test::testGetInflationReward().await?;
    //solana_test::testopentelemetry().await?;
-  //  Ok(())
-//}
+   solana_test::testSemaphore().await?;
+    Ok(())
+}
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -66,7 +67,7 @@ fn init_tracer_provider() {
         .build();
     global::set_tracer_provider(provider);
 }
-
+/***
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
@@ -87,3 +88,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         });
     }
 }
+**/

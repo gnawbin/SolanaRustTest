@@ -9,6 +9,7 @@ use opentelemetry_sdk::trace::{SdkTracerProvider, BatchSpanProcessor};
 use opentelemetry_sdk::Resource;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::time::Duration;
 use rand::Rng;
 use tokio::net::TcpListener;
 
@@ -51,6 +52,8 @@ use bincode::deserialize;
 use bip39::{Language, Mnemonic, Seed, MnemonicType};
 use futures::stream::StreamExt;
 use std::fmt;
+use tokio::sync::Semaphore;
+use std::sync::Arc;
 //2025年生产推荐参数
 const MEMORY_COST: u32=65_536;
 const ITERATIONS: u32=2;
@@ -1177,4 +1180,69 @@ pub async fn testopentelemetry()-> Result<(), Box<dyn std::error::Error + Send +
             }
         });
     }
+}
+pub async fn testSemaphore()->Result<()>{
+  //信号量（Semaphore）是控制并发访问共享资源的同步原语，用于限制同时访问特定资源的线程或任务数量。
+  let semaphore=Arc::new(Semaphore::new(3));
+  let mut handles: Vec<tokio::task::JoinHandle<()>> = vec![];
+  // 启动 10 个任务
+  for i in 0..10{
+    let semaphore=semaphore.clone();
+     let handle = tokio::spawn(async move {
+            // 获取一个许可
+            let permit = semaphore.acquire().await.unwrap();
+            println!("Task {} acquired permit", i);
+
+            // 模拟工作
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+            println!("Task {} releasing permit", i);
+            // 退出作用域时自动释放许可
+        });
+        handles.push(handle);
+  }
+  // 等待所有任务完成
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    Ok(())
+}
+pub async fn testAcquireWithTimeout()->Result<(),anyhow::Error>{
+    //限时获取和 try_acquire
+    let semaphore=Arc::new(Semaphore::new(1));
+    //获取许可
+    let _permit=semaphore.acquire().await.unwrap();
+        // 在另一个任务中尝试获取许可
+    let semaphore_clone = semaphore.clone();
+    let handle = tokio::spawn(async move {
+        // 限时获取许可
+        match tokio::time::timeout(
+            Duration::from_millis(1000),
+            semaphore_clone.acquire()
+        ).await {
+            Ok(Ok(permit)) => {
+                println!("Successfully acquired permit after timeout");
+                Some(permit)
+            },
+            Ok(Err(_)) => {
+                println!("Semaphore closed");
+                None
+            },
+            Err(_) => {
+                println!("Timeout waiting for permit");
+                None
+            }
+        }
+    });
+
+    let result = handle.await.unwrap();
+
+    // 尝试立即获取许可
+    match semaphore.try_acquire() {
+        Ok(permit) => println!("Immediate acquisition successful"),
+        Err(_) => println!("Immediate acquisition failed - no permits available"),
+    }
+    
+    Ok(())
 }
