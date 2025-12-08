@@ -7,7 +7,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // solana_test::testGetAccountInfo().await?;
     // solana_test::testGetInflationReward().await?;
    //solana_test::testopentelemetry().await?;
-   solana_test::testSemaphore().await?;
+   solana_test::testAcquireWithTimeout().await?;
     Ok(())
 }
 
@@ -89,3 +89,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 }
 **/
+// ==================== 配置区 ====================
+// 改成你的代币 Mint 地址
+const TOKEN_MINT: &str = "YOUR_TOKEN_MINT_HERE11111111111111111111111111111111";
+// RPC（开发先用 devnet）
+const RPC_URL: &str = "https://api.devnet.solana.com";
+// 空投用的资金钱包（放点代币就行）
+const TREASURY_KEYPAIR_PATH: &str = "treasury.json"; 
+type UserId = u64;
+static WALLETS: once_cell::sync::Lazy<Arc<Mutex<HashMap<UserId, Keypair>>>> =
+    once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+// 放项目根目录
+pub async fn testWallets()->Result<()>{
+    Ok(())
+}

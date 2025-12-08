@@ -1223,7 +1223,9 @@ pub async fn testAcquireWithTimeout()->Result<(),anyhow::Error>{
         ).await {
             Ok(Ok(permit)) => {
                 println!("Successfully acquired permit after timeout");
-                Some(permit)
+                // Drop the permit immediately since we don't need it
+                drop(permit);
+                Some(())
             },
             Ok(Err(_)) => {
                 println!("Semaphore closed");
@@ -1236,7 +1238,7 @@ pub async fn testAcquireWithTimeout()->Result<(),anyhow::Error>{
         }
     });
 
-    let result = handle.await.unwrap();
+    let _result = handle.await.unwrap();
 
     // 尝试立即获取许可
     match semaphore.try_acquire() {
