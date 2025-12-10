@@ -5746,6 +5746,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "mollusk-svm",
+ "once_cell",
  "opentelemetry 0.31.0",
  "opentelemetry-jaeger",
  "opentelemetry-otlp",
